@@ -1,0 +1,4 @@
+include ':annotation'
+include ':app'
+include ':plugins'
+rootProject.name = "FunAnalysis"

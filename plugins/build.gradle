@@ -1,0 +1,33 @@
+apply plugin: 'groovy'//引入 groovy支持的插件
+apply plugin: 'maven' //引入maven支持的插件
+
+dependencies {
+    //引入 groovy支持的插件
+    implementation gradleApi()
+    implementation localGroovy()
+    implementation('com.android.tools.build:gradle:4.1.1')
+}
+
+//使用maven仓库
+repositories {
+    mavenCentral()
+    google()
+    jcenter()
+}
+//定义插件的在本地maven中的id
+group = 'com.ailiwean'
+//定义插件的在本地maven中的版本号
+version = '1.0.1'
+//将插件打包上传到本地maven
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            //指定本地maven的路径
+            repository(url: uri('../repo')) {
+                authentication(userName: "", password: "")
+            }
+            pom.artifactId = "iplugins"
+            pom.packaging = "aar"
+        }
+    }
+}
