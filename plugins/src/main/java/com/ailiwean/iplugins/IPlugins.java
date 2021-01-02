@@ -10,19 +10,16 @@ import org.gradle.api.Project;
 public class IPlugins implements Plugin<Project> {
     @Override
     public void apply(Project project) {
+        project.getExtensions().create(Const.configName, ConfigExtension.class);
+        AnyTransform anyTransform = new AnyTransform(project);
         boolean hasApp = project.getPlugins().hasPlugin(AppPlugin.class);
         if (hasApp) {
-            System.out.println("useAppExtension");
             AppExtension appExtension = project.getExtensions().getByType(AppExtension.class);
-            if(appExtension==null)
-                System.out.println("useAppExtension为null");
-            appExtension.registerTransform(new AnyTransform(project));
-
+            appExtension.registerTransform(anyTransform);
         } else {
-            System.out.println("useLibExtension");
             LibraryExtension libraryExtension = project.getExtensions().getByType(LibraryExtension.class);
-            libraryExtension.registerTransform(new AnyTransform(project));
+            libraryExtension.registerTransform(anyTransform);
         }
-
+        project.afterEvaluate(Utils::deleteCacheFile);
     }
 }

@@ -9,14 +9,16 @@ import org.objectweb.asm.commons.AdviceAdapter;
 
 public class AnalysisClassVisitor extends ClassVisitor {
 
-    Project project;
     String className = "";
 
-    public AnalysisClassVisitor(int api, ClassVisitor cv, Project project) {
+    Project project;
+    ConfigExtension configExtension;
+
+    public AnalysisClassVisitor(int api, ClassVisitor cv, Project project, ConfigExtension configExtension) {
         super(api, cv);
         this.project = project;
+        this.configExtension = configExtension;
     }
-
 
     @Override
     public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
@@ -62,6 +64,7 @@ public class AnalysisClassVisitor extends ClassVisitor {
                 invokeStatic(TypeStatic.systemType(), MethodStatic.currentTimeMillis());
                 int endTimeIndex = newLocal(Type.LONG_TYPE);
                 storeLocal(endTimeIndex, Type.LONG_TYPE);
+                visitLdcInsn(configExtension.tag);
                 //类名:方法名
                 visitLdcInsn(className + ":" + name);
                 loadLocal(endTimeIndex, Type.LONG_TYPE);

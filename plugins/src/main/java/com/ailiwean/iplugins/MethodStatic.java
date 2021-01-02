@@ -31,15 +31,15 @@ public class MethodStatic {
     }
 
     public static org.objectweb.asm.commons.Method logi() {
-        return new org.objectweb.asm.commons.Method("i", "(Ljava/lang/String;J)V");
+        return new org.objectweb.asm.commons.Method("i", "(Ljava/lang/String;Ljava/lang/String;J)V");
     }
 
     public static org.objectweb.asm.commons.Method logw() {
-        return new org.objectweb.asm.commons.Method("w", "(Ljava/lang/String;J)V");
+        return new org.objectweb.asm.commons.Method("w", "(Ljava/lang/String;Ljava/lang/String;J)V");
     }
 
     public static org.objectweb.asm.commons.Method loge() {
-        return new org.objectweb.asm.commons.Method("e", "(Ljava/lang/String;J)V");
+        return new org.objectweb.asm.commons.Method("e", "(Ljava/lang/String;Ljava/lang/String;J)V");
     }
 
 

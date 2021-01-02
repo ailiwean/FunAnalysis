@@ -26,6 +26,7 @@ import static org.objectweb.asm.ClassWriter.COMPUTE_FRAMES;
 public class AnyTransform extends Transform {
 
     Project project;
+    private ConfigExtension configExtension;
 
     public AnyTransform(Project project) {
         this.project = project;
@@ -33,7 +34,7 @@ public class AnyTransform extends Transform {
 
     @Override
     public String getName() {
-        return project.getName() + "funAnalysisTask";
+        return project.getName() + Const.transformName;
     }
 
     @Override
@@ -51,10 +52,10 @@ public class AnyTransform extends Transform {
         return false;
     }
 
-
     @Override
     public void transform(TransformInvocation transformInvocation) throws TransformException, InterruptedException, IOException {
         super.transform(transformInvocation);
+
         transformInvocation.getInputs().forEach(transformInput -> {
 
             transformInput.getJarInputs().forEach(jarInput -> {
@@ -89,8 +90,6 @@ public class AnyTransform extends Transform {
                     if (!file.getAbsolutePath().endsWith(".class"))
                         return;
 
-                    project.getLogger().warn("文件输出路径" + file.getAbsolutePath());
-
                     try {
                         exeInstrumentation(file);
                     } catch (IOException e) {
@@ -121,9 +120,16 @@ public class AnyTransform extends Transform {
      * @param file
      */
     private void exeInstrumentation(File file) throws IOException {
+
+        if (configExtension == null)
+            configExtension = project.getExtensions().getByType(ConfigExtension.class);
+
+        if (configExtension == null || !configExtension.enable)
+            return;
+
         ClassReader cr = new ClassReader(new FileInputStream(file));
         ClassWriter cw = new ClassWriter(COMPUTE_FRAMES);
-        cr.accept(new AnalysisClassVisitor(Opcodes.ASM5, cw, project), EXPAND_FRAMES);
+        cr.accept(new AnalysisClassVisitor(Opcodes.ASM5, cw, project, configExtension), EXPAND_FRAMES);
         FileOutputStream fileOutputStream = new FileOutputStream(file);
         fileOutputStream.write(cw.toByteArray());
         fileOutputStream.flush();
@@ -138,8 +144,11 @@ public class AnyTransform extends Transform {
         }
     }
 
-    interface Run {
-        void each(File file);
+    /***
+     *  Project初始化完调用，避免Tranform对象缓存导致配置项不能及时刷新
+     */
+    public void setConfigExtension(ConfigExtension configExtension) {
+        this.configExtension = configExtension;
     }
 
     public void eachFile(File originFile, Run run) {
@@ -160,4 +169,9 @@ public class AnyTransform extends Transform {
         }
 
     }
+
+    interface Run {
+        void each(File file);
+    }
+
 }
