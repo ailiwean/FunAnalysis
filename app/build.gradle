@@ -39,10 +39,10 @@ android {
     }
 }
 
-funAnalysis {
-    enable = false
-    tag = "test123"
-}
+//funAnalysis {
+//    enable = true
+//    tag = "test123456"
+//}
 
 dependencies {
 

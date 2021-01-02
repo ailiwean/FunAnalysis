@@ -9,10 +9,11 @@ import org.objectweb.asm.commons.AdviceAdapter;
 
 public class AnalysisClassVisitor extends ClassVisitor {
 
-    String className = "";
+    private String className = "";
 
-    Project project;
-    ConfigExtension configExtension;
+    private Project project;
+    private ConfigExtension configExtension;
+    private boolean isClassAnnotation;
 
     public AnalysisClassVisitor(int api, ClassVisitor cv, Project project, ConfigExtension configExtension) {
         super(api, cv);
@@ -30,58 +31,93 @@ public class AnalysisClassVisitor extends ClassVisitor {
     @Override
     public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
         MethodVisitor methodVisitor = super.visitMethod(access, name, desc, signature, exceptions);
-        return new AdviceAdapter(api, methodVisitor, access, name, desc) {
-
-            private int startTimeIndex;
-
-            @Override
-            protected void onMethodEnter() {
-                super.onMethodEnter();
-                if (!isNeedOpe)
-                    return;
-
-                enterMethodInfo(className + ":" + name);
-                invokeStatic(TypeStatic.systemType(), MethodStatic.currentTimeMillis());
-                startTimeIndex = newLocal(Type.LONG_TYPE);
-                storeLocal(startTimeIndex, Type.LONG_TYPE);
-
-            }
-
-            boolean isNeedOpe = false;
-
-            @Override
-            public AnnotationVisitor visitAnnotation(String desc, boolean visible) {
-                isNeedOpe = desc.contains("Lcom/ailiwean/annotation/Analysis");
-                return super.visitAnnotation(desc, visible);
-            }
-
-            @Override
-            protected void onMethodExit(int opcode) {
-                super.onMethodExit(opcode);
-                if (!isNeedOpe)
-                    return;
-
-                invokeStatic(TypeStatic.systemType(), MethodStatic.currentTimeMillis());
-                int endTimeIndex = newLocal(Type.LONG_TYPE);
-                storeLocal(endTimeIndex, Type.LONG_TYPE);
-                visitLdcInsn(configExtension.tag);
-                //类名:方法名
-                visitLdcInsn(className + ":" + name);
-                loadLocal(endTimeIndex, Type.LONG_TYPE);
-                loadLocal(startTimeIndex, Type.LONG_TYPE);
-                mv.visitInsn(LSUB);
-                invokeStatic(TypeStatic.log(), MethodStatic.logi());
-                exitMethodInfo();
-            }
-        };
+        return new AnalysisMethodVisitor(api, methodVisitor,
+                access, name,
+                desc, this,
+                configExtension, project);
     }
 
-    private void enterMethodInfo(String info) {
-        project.getLogger().warn("start insert:" + info);
+    @Override
+    public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+        isClassAnnotation = descriptor.contains(Const.annotationDesc);
+        return super.visitAnnotation(descriptor, visible);
     }
 
-    private void exitMethodInfo() {
-        project.getLogger().warn("insert ok!!!");
+    public static class AnalysisMethodVisitor extends AdviceAdapter {
+
+        private final AnalysisClassVisitor classVisitor;
+        private final String methodName;
+        private final ConfigExtension extension;
+        private final Project project;
+
+        protected AnalysisMethodVisitor(
+                int api,
+                MethodVisitor methodVisitor,
+                int access,
+                String name,
+                String descriptor,
+                AnalysisClassVisitor classVisitor,
+                ConfigExtension extension,
+                Project project) {
+            super(api, methodVisitor, access, name, descriptor);
+            this.classVisitor = classVisitor;
+            this.methodName = name;
+            this.extension = extension;
+            this.project = project;
+            isClassAnnotation = classVisitor.isClassAnnotation;
+        }
+
+        private int startTimeIndex;
+        boolean isClassAnnotation;
+        boolean isMethodAnnotation = false;
+
+        @Override
+        public AnnotationVisitor visitAnnotation(String desc, boolean visible) {
+            isMethodAnnotation = desc.contains(Const.annotationDesc);
+            return super.visitAnnotation(desc, visible);
+        }
+
+
+        @Override
+        protected void onMethodEnter() {
+            super.onMethodEnter();
+            if (!(isMethodAnnotation || isClassAnnotation))
+                return;
+
+            enterMethodInfo(classVisitor.className + ":" + methodName);
+            invokeStatic(TypeStatic.systemType(), MethodStatic.currentTimeMillis());
+            startTimeIndex = newLocal(Type.LONG_TYPE);
+            storeLocal(startTimeIndex, Type.LONG_TYPE);
+
+        }
+
+        @Override
+        protected void onMethodExit(int opcode) {
+            super.onMethodExit(opcode);
+            if (!(isMethodAnnotation || isClassAnnotation))
+                return;
+
+            invokeStatic(TypeStatic.systemType(), MethodStatic.currentTimeMillis());
+            int endTimeIndex = newLocal(Type.LONG_TYPE);
+            storeLocal(endTimeIndex, Type.LONG_TYPE);
+            visitLdcInsn(extension.tag);
+            //类名:方法名
+            visitLdcInsn(classVisitor.className + ":" + methodName);
+            loadLocal(endTimeIndex, Type.LONG_TYPE);
+            loadLocal(startTimeIndex, Type.LONG_TYPE);
+            mv.visitInsn(LSUB);
+            invokeStatic(TypeStatic.log(), MethodStatic.logi());
+            exitMethodInfo();
+        }
+
+        private void enterMethodInfo(String info) {
+            project.getLogger().warn("start insert:" + info);
+        }
+
+        private void exitMethodInfo() {
+            project.getLogger().warn("insert ok!!!");
+        }
+
     }
 
 }

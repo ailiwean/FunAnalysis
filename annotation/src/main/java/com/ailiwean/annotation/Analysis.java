@@ -8,5 +8,4 @@ import java.lang.annotation.Target;
 @Target({ElementType.METHOD, ElementType.TYPE})
 @Retention(RetentionPolicy.CLASS)
 public @interface Analysis {
-    String tag() default "FunAnalysis";
 }
