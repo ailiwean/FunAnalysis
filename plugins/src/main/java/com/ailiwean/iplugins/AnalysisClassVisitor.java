@@ -7,6 +7,9 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.AdviceAdapter;
 
+/***
+ *  耗时监听
+ */
 public class AnalysisClassVisitor extends ClassVisitor {
 
     private String className = "";
@@ -39,7 +42,7 @@ public class AnalysisClassVisitor extends ClassVisitor {
 
     @Override
     public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-        isClassAnnotation = descriptor.contains(Const.annotationDesc);
+        isClassAnnotation = descriptor.contains(Constant.useTimeAnnotationDesc);
         return super.visitAnnotation(descriptor, visible);
     }
 
@@ -73,7 +76,7 @@ public class AnalysisClassVisitor extends ClassVisitor {
 
         @Override
         public AnnotationVisitor visitAnnotation(String desc, boolean visible) {
-            isMethodAnnotation = desc.contains(Const.annotationDesc);
+            isMethodAnnotation = desc.contains(Constant.useTimeAnnotationDesc);
             return super.visitAnnotation(desc, visible);
         }
 

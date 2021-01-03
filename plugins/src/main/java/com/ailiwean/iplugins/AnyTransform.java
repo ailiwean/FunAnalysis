@@ -17,8 +17,15 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.jar.JarOutputStream;
 
 import static org.objectweb.asm.ClassReader.EXPAND_FRAMES;
 import static org.objectweb.asm.ClassWriter.COMPUTE_FRAMES;
@@ -28,13 +35,16 @@ public class AnyTransform extends Transform {
     Project project;
     private ConfigExtension configExtension;
 
+    //jar注入相关信息
+    private List<InjectToClassVisitor.PileInsertInfo> pileInsertInfoList;
+
     public AnyTransform(Project project) {
         this.project = project;
     }
 
     @Override
     public String getName() {
-        return project.getName() + Const.transformName;
+        return project.getName() + Constant.transformName;
     }
 
     @Override
@@ -44,7 +54,7 @@ public class AnyTransform extends Transform {
 
     @Override
     public Set<? super QualifiedContent.Scope> getScopes() {
-        return TransformManager.PROJECT_ONLY;
+        return TransformManager.SCOPE_FULL_PROJECT;
     }
 
     @Override
@@ -56,30 +66,8 @@ public class AnyTransform extends Transform {
     public void transform(TransformInvocation transformInvocation) throws TransformException, InterruptedException, IOException {
         super.transform(transformInvocation);
 
+        //本地文件操作
         transformInvocation.getInputs().forEach(transformInput -> {
-
-            transformInput.getJarInputs().forEach(jarInput -> {
-
-                if (!jarInput.getFile().getAbsolutePath().endsWith(".jar"))
-                    return;
-
-                File outDir = transformInvocation.getOutputProvider()
-                        .getContentLocation(
-                                jarInput.getName(),
-                                jarInput.getContentTypes(),
-                                jarInput.getScopes(),
-                                Format.JAR);
-
-                try {
-                    if (!jarInput.getFile().isDirectory())
-                        FileUtils.copyFile(jarInput.getFile(), outDir);
-                    else FileUtils.copyDirectory(jarInput.getFile(), outDir);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-
-            });
-
             transformInput.getDirectoryInputs().forEach(directoryInput -> {
 
                 eachFile(directoryInput.getFile(), file -> {
@@ -91,10 +79,16 @@ public class AnyTransform extends Transform {
                         return;
 
                     try {
-                        exeInstrumentation(file);
+
+//                        exePileInsertUseTime(file);
+
+                        computeAnnotationSign(file);
+
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
+
+
                 });
 
                 File outDir = transformInvocation.getOutputProvider()
@@ -111,20 +105,64 @@ public class AnyTransform extends Transform {
                     e.printStackTrace();
                 }
             });
-
         });
+
+        //jar包操作
+        transformInvocation.getInputs().forEach(transformInput -> {
+            transformInput.getJarInputs().forEach(jarInput -> {
+
+                if (!jarInput.getFile().getAbsolutePath().endsWith(".jar"))
+                    return;
+                File outDir = transformInvocation.getOutputProvider()
+                        .getContentLocation(
+                                jarInput.getName(),
+                                jarInput.getContentTypes(),
+                                jarInput.getScopes(),
+                                Format.JAR);
+
+                try {
+
+                    OutputStream out = new FileOutputStream(outDir);
+                    JarOutputStream jarOutputStream = new JarOutputStream(out);
+
+                    JarFile jarFile = new JarFile(jarInput.getFile());
+                    Enumeration<JarEntry> entries = jarFile.entries();
+                    while (entries.hasMoreElements()) {
+                        JarEntry jarEntry = entries.nextElement();
+                        byte[] bytes = Utils.inputSteam2Byte(jarFile.getInputStream(jarEntry));
+
+                        if (jarEntry.getName().endsWith(".class") &&
+                                !(jarEntry.getName().contains("$"))) {
+                            try {
+                                bytes = exePileInsertJar(bytes);
+                            } catch (Exception e) {
+                            }
+                        }
+
+                        JarEntry newJar = new JarEntry(jarEntry.getName());
+                        jarOutputStream.putNextEntry(newJar);
+                        jarOutputStream.write(bytes);
+                    }
+                    jarOutputStream.close();
+                    jarFile.close();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            });
+        });
+
     }
 
     /***
-     * 插桩
+     * 耗时计算插桩
      * @param file
      */
-    private void exeInstrumentation(File file) throws IOException {
+    private void exePileInsertUseTime(File file) throws IOException {
 
         if (configExtension == null)
             configExtension = project.getExtensions().getByType(ConfigExtension.class);
 
-        if (configExtension == null || !configExtension.enable)
+        if (configExtension == null || !configExtension.enableUseTime)
             return;
 
         ClassReader cr = new ClassReader(new FileInputStream(file));
@@ -135,20 +173,56 @@ public class AnyTransform extends Transform {
         fileOutputStream.flush();
         fileOutputStream.close();
 
-        if (file.getAbsolutePath().contains("Test")) {
-            File outputFile = new File("C:\\Users\\Ailiwean\\Desktop\\project\\FunAnalysis\\asmfile\\test.class");
-            if (outputFile.exists())
-                outputFile.delete();
-            outputFile.createNewFile();
-            FileUtils.copyFile(file, outputFile);
-        }
+//        if (file.getAbsolutePath().contains("Test")) {
+//            File outputFile = new File("C:\\Users\\Ailiwean\\Desktop\\project\\FunAnalysis\\asmfile\\test.class");
+//            if (outputFile.exists())
+//                outputFile.delete();
+//            outputFile.createNewFile();
+//            FileUtils.copyFile(file, outputFile);
+//        }
     }
 
     /***
-     *  Project初始化完调用，避免Tranform对象缓存导致配置项不能及时刷新
+     *  计算本地文件注解标记的将插入三方jar中
+     * @param file
+     * @throws IOException
      */
-    public void setConfigExtension(ConfigExtension configExtension) {
-        this.configExtension = configExtension;
+    private void computeAnnotationSign(File file) throws IOException {
+
+        if (configExtension == null)
+            configExtension = project.getExtensions().getByType(ConfigExtension.class);
+
+        if (configExtension == null || !configExtension.enableJarInject)
+            return;
+
+        InjectToClassVisitor.Compute com = InjectToClassVisitor.getCompute(project);
+        com.bindResult(insertInfo -> {
+            if (pileInsertInfoList == null)
+                pileInsertInfoList = new ArrayList<>();
+            pileInsertInfoList.add(insertInfo);
+        });
+        //读取注解标记
+        ClassReader cr = new ClassReader(new FileInputStream(file));
+        cr.accept(com, EXPAND_FRAMES);
+    }
+
+    private byte[] exePileInsertJar(byte[] bytes) throws IOException {
+
+        if (configExtension == null)
+            configExtension = project.getExtensions().getByType(ConfigExtension.class);
+
+        if (pileInsertInfoList == null || pileInsertInfoList.size() == 0) {
+            project.getLogger().warn("not find need insert to jar method");
+            return bytes;
+        }
+
+        if (configExtension == null || !configExtension.enableJarInject)
+            return bytes;
+
+        ClassReader cr = new ClassReader(bytes);
+        ClassWriter cw = new ClassWriter(COMPUTE_FRAMES);
+        cr.accept(InjectToClassVisitor.getOpe(cw, project, pileInsertInfoList), EXPAND_FRAMES);
+        return cw.toByteArray();
     }
 
     public void eachFile(File originFile, Run run) {

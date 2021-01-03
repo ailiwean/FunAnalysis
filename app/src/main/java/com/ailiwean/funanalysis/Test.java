@@ -5,7 +5,11 @@ import com.ailiwean.annotation.FunLog;
 
 public class Test {
 
-    @Analysis(tag = "add")
+    public void get(){
+        pri();
+    }
+
+
     public void pri() {
 
 //
