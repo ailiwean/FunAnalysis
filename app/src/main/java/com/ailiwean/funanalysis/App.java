@@ -21,10 +21,13 @@ public class App extends Application {
 
     static Context mContext;
 
+    static App app;
+
     @Override
     public void onCreate() {
         super.onCreate();
         mContext = this;
+        App.app = this;
         Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
             @Override
             public void uncaughtException(@NonNull Thread t, @NonNull Throwable e) {
@@ -86,5 +89,14 @@ public class App extends Application {
                 });
     }
 
+    public static App getApp() {
+        return app;
+    }
+
+    public Activity getTopActivity() {
+        if (activitySet.size() != 0)
+            return new ArrayList<>(activitySet).get(0);
+        return null;
+    }
 
 }

@@ -79,11 +79,8 @@ public class AnyTransform extends Transform {
                         return;
 
                     try {
-
-//                        exePileInsertUseTime(file);
-
+                        exePileInsertUseTime(file);
                         computeAnnotationSign(file);
-
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -129,16 +126,15 @@ public class AnyTransform extends Transform {
                     Enumeration<JarEntry> entries = jarFile.entries();
                     while (entries.hasMoreElements()) {
                         JarEntry jarEntry = entries.nextElement();
-                        byte[] bytes = Utils.inputSteam2Byte(jarFile.getInputStream(jarEntry));
 
+                        byte[] bytes = Utils.inputSteam2Byte(jarFile.getInputStream(jarEntry));
                         if (jarEntry.getName().endsWith(".class") &&
-                                !(jarEntry.getName().contains("$"))) {
+                                !jarEntry.getName().contains("$")) {
                             try {
                                 bytes = exePileInsertJar(bytes);
-                            } catch (Exception e) {
+                            } catch (Exception ignored) {
                             }
                         }
-
                         JarEntry newJar = new JarEntry(jarEntry.getName());
                         jarOutputStream.putNextEntry(newJar);
                         jarOutputStream.write(bytes);

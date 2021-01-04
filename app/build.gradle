@@ -42,6 +42,7 @@ android {
 funAnalysis {
     enableUseTime = true
     tag = "shuai"
+
 }
 
 dependencies {

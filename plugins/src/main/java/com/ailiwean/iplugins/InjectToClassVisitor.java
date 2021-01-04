@@ -5,6 +5,7 @@ import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
+import org.objectweb.asm.commons.AdviceAdapter;
 import org.objectweb.asm.commons.Method;
 import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.ClassNode;
@@ -32,13 +33,17 @@ public class InjectToClassVisitor {
      */
     public static class PileInsertInfo {
 
+        //方法头或方法尾
+        int type;
+
         Type fromClass;
         Type toClass;
 
         Method fromMethod;
         Method toMethod;
 
-        public PileInsertInfo(Type fromClass, Type toClass, Method fromMethod, Method toMethod) {
+        public PileInsertInfo(int type, Type fromClass, Type toClass, Method fromMethod, Method toMethod) {
+            this.type = type;
             this.fromClass = fromClass;
             this.toClass = toClass;
             this.fromMethod = fromMethod;
@@ -74,7 +79,7 @@ public class InjectToClassVisitor {
         @Override
         public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
             super.visit(version, access, name, signature, superName, interfaces);
-            classNameSign = "L" + name;
+            classNameSign = "L" + name + ";";
         }
 
         @Override
@@ -94,14 +99,24 @@ public class InjectToClassVisitor {
                         if (visibleAnnotation.values == null)
                             continue;
 
+                        int type = 0;
+                        try {
+                            type = Integer.parseInt(visibleAnnotation.values.get(3).toString());
+                        } catch (Exception ignored) {
+                        }
+                        if (type != 0 && type != 1)
+                            throw new RuntimeException("injectTo type must TOP or Bottom");
+
                         String[] values = visibleAnnotation.values.get(1).toString().split(",");
                         PileInsertInfo insertInfo = new PileInsertInfo(
+                                type,
                                 Type.getType(classNameSign),
-                                Type.getType(values[0]),
+                                Type.getType(values[0].replaceAll("[^\\w/;$]", "")),
                                 new Method(name, "()V"),
-                                new Method(values[1],
-                                        values[2])
+                                new Method(values[1].replaceAll("[^A-Za-z_]", ""),
+                                        values[2].replaceAll("[^\\w();/$]", ""))
                         );
+
                         resultBack.back(insertInfo);
                     }
                 }
@@ -120,6 +135,9 @@ public class InjectToClassVisitor {
 
         private Project project;
         private List<PileInsertInfo> pileInsertInfoList;
+        //Class是否匹配
+        boolean isMatchClass;
+        int matchIndex = -1;
 
         public Ope(ClassVisitor classVisitor, Project project, List<PileInsertInfo> pileInsertInfoList) {
             super(Opcodes.ASM5, classVisitor);
@@ -127,15 +145,76 @@ public class InjectToClassVisitor {
             this.pileInsertInfoList = pileInsertInfoList;
         }
 
-
         @Override
         public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
             super.visit(version, access, name, signature, superName, interfaces);
             for (PileInsertInfo insertInfo : pileInsertInfoList) {
-                if (insertInfo.toClass.getDescriptor().contains(name))
-                    project.getLogger().warn("找到符合特征的" + name);
+                if (insertInfo.toClass.getDescriptor().contains(name)) {
+                    isMatchClass = true;
+                    matchIndex++;
+                    break;
+                }
             }
         }
+
+        @Override
+        public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+            MethodVisitor methodVisitor = super.visitMethod(access, name, descriptor, signature, exceptions);
+            PileInsertInfo pileInsertInfo = pileInsertInfoList.get(matchIndex);
+
+            boolean isMatchMethod = pileInsertInfo.toMethod.getName().equals(name) &&
+                    pileInsertInfo.toMethod.getDescriptor().equals(descriptor);
+
+            //类与方法必须同时匹配
+            if (!isMatchClass || !isMatchMethod)
+                return methodVisitor;
+
+            else return new AdviceAdapter(api, methodVisitor, access, name, descriptor) {
+
+                @Override
+                protected void onMethodEnter() {
+                    super.onMethodEnter();
+
+                    enterMethodInfo("@@@from >>>" + pileInsertInfo.fromClass.getDescriptor() + ":" +
+                            pileInsertInfo.fromMethod.getName() + "\n @@@to >>>" +
+                            pileInsertInfo.toClass.getDescriptor() + ":" +
+                            pileInsertInfo.toMethod.getName());
+
+                    //方法头插入
+                    if (pileInsertInfo.type == 0) {
+                        newInstance(pileInsertInfo.fromClass);
+                        dup();
+                        invokeConstructor(pileInsertInfo.fromClass, MethodStatic.emptyInit());
+                        invokeVirtual(pileInsertInfo.fromClass, pileInsertInfo.fromMethod);
+                        visitInsn(RETURN);
+                    }
+                }
+
+                @Override
+                protected void onMethodExit(int opcode) {
+
+                    //方法尾插入
+                    if (pileInsertInfo.type == 1) {
+                        newInstance(pileInsertInfo.fromClass);
+                        dup();
+                        invokeConstructor(pileInsertInfo.fromClass, MethodStatic.emptyInit());
+                        invokeVirtual(pileInsertInfo.fromClass, pileInsertInfo.fromMethod);
+                    }
+
+                    exitMethodInfo();
+                }
+
+                private void enterMethodInfo(String info) {
+                    project.getLogger().warn("start insert:" + info);
+                }
+
+                private void exitMethodInfo() {
+                    project.getLogger().warn("insert ok!!!");
+                }
+
+            };
+        }
+
     }
 
 }

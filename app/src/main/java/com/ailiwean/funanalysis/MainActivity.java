@@ -10,7 +10,6 @@ import com.ailiwean.annotation.InjectTo;
 
 public class MainActivity extends AppCompatActivity {
 
-    @InjectTo(targetMethod = {"Landroidx/appcompat/app/AppCompatActivity", "onCreate", "(Landroid/os/Bundle;)V"})
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
