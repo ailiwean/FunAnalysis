@@ -207,13 +207,13 @@ public class AnyTransform extends Transform {
         if (configExtension == null)
             configExtension = project.getExtensions().getByType(ConfigExtension.class);
 
+        if (configExtension == null || !configExtension.enableJarInject)
+            return bytes;
+
         if (pileInsertInfoList == null || pileInsertInfoList.size() == 0) {
             project.getLogger().warn("not find need insert to jar method");
             return bytes;
         }
-
-        if (configExtension == null || !configExtension.enableJarInject)
-            return bytes;
 
         ClassReader cr = new ClassReader(bytes);
         ClassWriter cw = new ClassWriter(COMPUTE_FRAMES);

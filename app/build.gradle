@@ -42,7 +42,7 @@ android {
 funAnalysis {
     enableUseTime = true
     tag = "shuai"
-
+    enableJarInject = false
 }
 
 dependencies {
